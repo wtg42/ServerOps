@@ -45,16 +45,11 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	for {
 		count = count + 1
 		typ, data, err := c.Read(ctx)
+		log.Println("=======>>>>>>", websocket.CloseStatus(err))
 		if err != nil {
 			log.Printf("error reading from websocket: %v", err)
 			return
 		}
 		log.Printf("received:%v %s", typ, data)
-
-		if count == 10 {
-			// 正常關閉 WebSocket 連接
-			c.Close(websocket.StatusNormalClosure, "normal closure")
-		}
 	}
-
 }
