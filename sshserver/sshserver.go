@@ -25,7 +25,8 @@ func main() {
 		cmd := s.Command()
 		if len(cmd) > 0 {
 			switch cmd[0] {
-			case "date":
+			case "logs":
+				// TODO: 這段改成使用 goroutine + StdoutPipe 持續讀取 tail -f
 				out, err := exec.Command("date").Output()
 				if err != nil {
 					io.WriteString(s, "Failed to run date command.\n")

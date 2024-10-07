@@ -8,10 +8,6 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-type IConnection interface {
-	Close()
-}
-
 type Connection struct {
 	Ip      string
 	Session *ssh.Session

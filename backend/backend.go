@@ -15,8 +15,9 @@ import (
 func main() {
 	mux := http.NewServeMux()
 
-	// 使用新的路由匹配方式來處理 WebSocket 請求
-	mux.HandleFunc("/ws", handleWebSocket)
+	// TODO: 在這裡新增你要的路由跟功能
+	// Logs Service router
+	mux.HandleFunc("/logs", handleLogsService)
 
 	// 設定靜態文件路由，提供 dist 目錄中的文件
 	// 編譯 WebOps 專案後 把 dist 目錄放在根目錄
@@ -32,7 +33,7 @@ func main() {
 }
 
 // 開啟 Websocket 處理跟網頁端的溝通
-func handleWebSocket(w http.ResponseWriter, r *http.Request) {
+func handleLogsService(w http.ResponseWriter, r *http.Request) {
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true, // 視需要配置選項
 	})
@@ -70,7 +71,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			defer con.Session.Close()
 			con.Session.Stdout = os.Stdout
 			con.Session.Stderr = os.Stderr
-			err := con.Session.Run("date")
+			err := con.Session.Run("logs")
 			if err != nil {
 				log.Printf("error reading from websocket: %v", err)
 			}
