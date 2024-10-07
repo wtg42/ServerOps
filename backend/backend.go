@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/coder/websocket"
+	"github.com/wtg42/ServerOps/backend/ssh"
 )
 
 // API Server
@@ -59,6 +60,9 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			log.Printf("Json contents is : %v", v)
+
+			// TODO: 將接收到的訊息傳給 SSH 連接
+			c := ssh.ConnectToSSHServerWithKey()
 		} else {
 			log.Printf("received:%v %s", typ, data)
 		}
