@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/coder/websocket"
 	"github.com/wtg42/ServerOps/backend/ssh"
@@ -42,7 +43,10 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	defer c.Close(websocket.StatusInternalError, "unexpected close")
 
 	ctx := context.Background()
+	con := ssh.InitConnectionInstance("localhost:2222")
+	defer con.Client.Close() // 先 Seesion 在 Client
 
+	// 開始接收 Websocket 請求
 	for {
 		typ, data, err := c.Read(ctx)
 		if err != nil {
@@ -61,8 +65,15 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			}
 			log.Printf("Json contents is : %v", v)
 
-			// TODO: 將接收到的訊息傳給 SSH 連接
-			c := ssh.ConnectToSSHServerWithKey()
+			// 將會話的標準輸出連接到本地的標準輸出
+			con.NewSession()
+			defer con.Session.Close()
+			con.Session.Stdout = os.Stdout
+			con.Session.Stderr = os.Stderr
+			err := con.Session.Run("date")
+			if err != nil {
+				log.Printf("error reading from websocket: %v", err)
+			}
 		} else {
 			log.Printf("received:%v %s", typ, data)
 		}
