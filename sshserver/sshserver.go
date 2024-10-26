@@ -28,7 +28,7 @@ func main() {
 			switch cmd[0] {
 			case "logs":
 				// TODO: 這段改成使用 goroutine + StdoutPipe 持續讀取 tail -f
-				fetchLogs()
+				fetchLogs(s)
 				// out, err := exec.Command("date").Output()
 				// if err != nil {
 				// 	io.WriteString(s, "Failed to run date command.\n")
@@ -40,16 +40,27 @@ func main() {
 		}
 	})
 
+	var sshport string = ":2222"
 	// 啟動伺服器，監聽 2222 埠口
-	log.Println("Starting SSH server on port 2222...")
-	err := ssh.ListenAndServe(":2222", nil)
+	log.Printf("Starting SSH server on port %s...", sshport)
+	err := ssh.ListenAndServe(sshport, nil)
 	if err != nil {
 		log.Fatal("Failed to start SSH server: ", err)
 	}
 }
 
-func fetchLogs() {
-	cmd := exec.Command("tail", "-f", "/var/log/php.log", "/var/log/apache/error_log")
+// fetchLogs streams logs from
+// "/var/log/php.log" and "/var/log/apache/error_log".
+// Use io.WriteString() to return data.
+func fetchLogs(s ssh.Session) {
+	args := []string{
+		"tail",
+		"-f",
+		"/var/log/php.log",
+		"/var/log/apache/error_log",
+		// "/var/log/system.log", // for test
+	}
+	cmd := exec.Command(args[0], args[1:]...)
 	stdout, err := cmd.StdoutPipe()
 
 	if err != nil {
@@ -62,16 +73,16 @@ func fetchLogs() {
 
 	scanner := bufio.NewScanner(stdout)
 	for scanner.Scan() {
-		fmt.Println(scanner.Text())
+		// 輸出當前 buffer 中的資料
+		io.WriteString(s, scanner.Text()+"\n")
 	}
 
-	// 處理讀取過程中的錯誤
 	if err := scanner.Err(); err != nil {
-		log.Fatalf("Error reading stdout: %v", err)
+		log.Fatalf("Error reading stdout: %s", err)
 	}
 
 	// 等待命令結束
 	if err := cmd.Wait(); err != nil {
-		log.Fatalf("Command finished with error: %v", err)
+		log.Fatalf("Command finished with error: %s", err)
 	}
 }

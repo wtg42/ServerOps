@@ -1,11 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
+	"strings"
 
 	"github.com/coder/websocket"
 	"github.com/wtg42/ServerOps/backend/ssh"
@@ -34,22 +35,26 @@ func main() {
 
 // 開啟 Websocket 處理跟網頁端的溝通
 func handleLogsService(w http.ResponseWriter, r *http.Request) {
-	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+	wscon, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true, // 視需要配置選項
 	})
 	if err != nil {
 		log.Printf("failed to accept websocket connection: %v", err)
 		return
 	}
-	defer c.Close(websocket.StatusInternalError, "unexpected close")
+	defer wscon.Close(websocket.StatusInternalError, "unexpected close")
 
 	ctx := context.Background()
-	con := ssh.InitConnectionInstance("localhost:2222")
-	defer con.Client.Close() // 先 Seesion 在 Client
+	var con *ssh.Connection
 
+	type Message struct {
+		Target string `json:"target"`
+		Data   string `json:"data"`
+		Type   string `json:"type"`
+	}
 	// 開始接收 Websocket 請求
 	for {
-		typ, data, err := c.Read(ctx)
+		typ, data, err := wscon.Read(ctx)
 		if err != nil {
 			log.Printf("error reading from websocket: %v", err)
 			log.Println("=>", websocket.CloseStatus(err))
@@ -58,22 +63,77 @@ func handleLogsService(w http.ResponseWriter, r *http.Request) {
 
 		if typ == websocket.MessageText {
 			// json structure
-			var v interface{}
+			var v Message
 			err = json.Unmarshal(data, &v)
 			if err != nil {
-				log.Printf("error reading from websocket: %v", err)
+				log.Printf("error reading from json data: %v", err)
 				return
 			}
 			log.Printf("Json contents is : %v", v)
+			if con == nil {
+				targetIP := strings.Builder{}
+				targetIP.WriteString(v.Target)
+				targetIP.WriteString(":2222")
+				con = ssh.InitConnectionInstance(targetIP.String())
+				defer con.Client.Close() // 先 Seesion 在 Client
+				targetIP.Reset()
+			}
 
-			// 將會話的標準輸出連接到本地的標準輸出
+			// 新的會話處理
 			con.NewSession()
 			defer con.Session.Close()
-			con.Session.Stdout = os.Stdout
-			con.Session.Stderr = os.Stderr
-			err := con.Session.Run("logs")
+
+			stdoutPipe, err := con.Session.StdoutPipe()
 			if err != nil {
-				log.Printf("error reading from websocket: %v", err)
+				log.Printf("error getting stdout pipe: %v", err)
+			}
+
+			stderrPipe, err := con.Session.StderrPipe()
+			if err != nil {
+				log.Printf("error getting stderr pipe: %v", err)
+			}
+
+			err = con.Session.Start("logs")
+			if err != nil {
+				log.Printf("error running command: %v", err)
+			}
+
+			// Remember that Start() and Wait() are asynchronous,
+			// and you can use a goroutine to handle the data in between.
+			go func() {
+				scanner := bufio.NewScanner(stdoutPipe)
+				for scanner.Scan() {
+					log.Printf("TEXT:: %v", scanner.Text())
+					// 將標準輸出的每一行發送到 WebSocket 客戶端
+					if err := wscon.Write(ctx, websocket.MessageText, scanner.Bytes()); err != nil {
+						log.Printf("error writing to websocket: %v", err)
+						continue
+					}
+				}
+
+				if scanner.Err() != nil {
+					log.Printf("error reading from stdout: %v", scanner.Err())
+				}
+			}()
+
+			go func() {
+				scanner := bufio.NewScanner(stderrPipe)
+				for scanner.Scan() {
+					// 將標準輸出的每一行發送到 WebSocket 客戶端
+					if err := wscon.Write(ctx, websocket.MessageText, scanner.Bytes()); err != nil {
+						log.Printf("error writing to websocket: %v", err)
+						continue
+					}
+				}
+
+				if scanner.Err() != nil {
+					log.Printf("error reading from stdout: %v", scanner.Err())
+				}
+			}()
+
+			err = con.Session.Wait()
+			if err != nil {
+				log.Printf("error running command: %v", err)
 			}
 		} else {
 			log.Printf("received:%v %s", typ, data)
