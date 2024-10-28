@@ -45,11 +45,6 @@ func main() {
 			case "logs":
 				// TODO: 這段改成使用 goroutine + StdoutPipe 持續讀取 tail -f
 				fetchLogs(s)
-				// out, err := exec.Command("date").Output()
-				// if err != nil {
-				// 	io.WriteString(s, "Failed to run date command.\n")
-				// }
-				// s.Write(out)
 			default:
 				io.WriteString(s, cmd[0]+" <- Unknown command.\n")
 			}

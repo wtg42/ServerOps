@@ -57,7 +57,13 @@ func handleLogsService(w http.ResponseWriter, r *http.Request) {
 		typ, data, err := wscon.Read(ctx)
 		if err != nil {
 			log.Printf("error reading from websocket: %v", err)
-			log.Println("=>", websocket.CloseStatus(err))
+
+			// If we receive a close message, close the connection.
+			statusCode := websocket.CloseStatus(err)
+			if statusCode != -1 {
+				wscon.Close(statusCode, err.Error())
+			}
+
 			return
 		}
 
