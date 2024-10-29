@@ -12,6 +12,14 @@ import (
 	"github.com/wtg42/ServerOps/backend/ssh"
 )
 
+// color for log message.
+type code = string
+type ColorCode struct {
+	Red   code
+	Green code
+	Reset code
+}
+
 // API Server
 func main() {
 	mux := http.NewServeMux()
@@ -35,18 +43,26 @@ func main() {
 
 // 開啟 Websocket 處理跟網頁端的溝通
 func handleLogsService(w http.ResponseWriter, r *http.Request) {
+	color := ColorCode{
+		Red:   "\033[31m",
+		Green: "\033[32m",
+		Reset: "\033[0m",
+	}
 	wscon, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true, // 視需要配置選項
 	})
 	if err != nil {
-		log.Printf("failed to accept websocket connection: %v", err)
+		log.Printf(color.Red+"failed to accept websocket connection: %v"+color.Reset, err)
 		return
 	}
 	defer wscon.Close(websocket.StatusInternalError, "unexpected close")
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	var con *ssh.Connection
 
+	// Frontend Json Structure.
 	type Message struct {
 		Target string `json:"target"`
 		Data   string `json:"data"`
@@ -54,16 +70,15 @@ func handleLogsService(w http.ResponseWriter, r *http.Request) {
 	}
 	// 開始接收 Websocket 請求
 	for {
+		log.Println(color.Green + "Waiting for message..." + color.Reset)
 		typ, data, err := wscon.Read(ctx)
 		if err != nil {
-			log.Printf("error reading from websocket: %v", err)
-
-			// If we receive a close message, close the connection.
 			statusCode := websocket.CloseStatus(err)
 			if statusCode != -1 {
-				wscon.Close(statusCode, err.Error())
+				log.Printf(color.Red+"WebSocket closed with status: %d, reason: %v"+color.Reset, statusCode, err)
+			} else {
+				log.Printf(color.Red+"WebSocket closed with an unknown reason, error: %v"+color.Reset, err)
 			}
-
 			return
 		}
 
@@ -72,7 +87,7 @@ func handleLogsService(w http.ResponseWriter, r *http.Request) {
 			var v Message
 			err = json.Unmarshal(data, &v)
 			if err != nil {
-				log.Printf("error reading from json data: %v", err)
+				log.Printf(color.Red+"error reading from json data: %v"+color.Reset, err)
 				return
 			}
 			log.Printf("Json contents is : %v", v)
@@ -91,17 +106,17 @@ func handleLogsService(w http.ResponseWriter, r *http.Request) {
 
 			stdoutPipe, err := con.Session.StdoutPipe()
 			if err != nil {
-				log.Printf("error getting stdout pipe: %v", err)
+				log.Printf(color.Red+"error getting stdout pipe: %v"+color.Reset, err)
 			}
 
 			stderrPipe, err := con.Session.StderrPipe()
 			if err != nil {
-				log.Printf("error getting stderr pipe: %v", err)
+				log.Printf(color.Red+"error getting stderr pipe: %v"+color.Reset, err)
 			}
 
 			err = con.Session.Start("logs")
 			if err != nil {
-				log.Printf("error running command: %v", err)
+				log.Printf(color.Red+"error running command `logs`: %v"+color.Reset, err)
 			}
 
 			// Remember that Start() and Wait() are asynchronous,
@@ -112,13 +127,13 @@ func handleLogsService(w http.ResponseWriter, r *http.Request) {
 					log.Printf("TEXT:: %v", scanner.Text())
 					// 將標準輸出的每一行發送到 WebSocket 客戶端
 					if err := wscon.Write(ctx, websocket.MessageText, scanner.Bytes()); err != nil {
-						log.Printf("error writing to websocket: %v", err)
+						log.Printf(color.Red+"error writing to websocket: %v"+color.Reset, err)
 						continue
 					}
 				}
 
 				if scanner.Err() != nil {
-					log.Printf("error reading from stdout: %v", scanner.Err())
+					log.Printf(color.Red+"error reading from stdout: %v"+color.Reset, scanner.Err())
 				}
 			}()
 
@@ -127,20 +142,22 @@ func handleLogsService(w http.ResponseWriter, r *http.Request) {
 				for scanner.Scan() {
 					// 將標準輸出的每一行發送到 WebSocket 客戶端
 					if err := wscon.Write(ctx, websocket.MessageText, scanner.Bytes()); err != nil {
-						log.Printf("error writing to websocket: %v", err)
+						log.Printf(color.Red+"error writing to websocket: %v"+color.Reset, err)
 						continue
 					}
 				}
 
 				if scanner.Err() != nil {
-					log.Printf("error reading from stdout: %v", scanner.Err())
+					log.Printf(color.Red+"error reading from stdout: %v"+color.Reset, scanner.Err())
 				}
 			}()
 
-			err = con.Session.Wait()
-			if err != nil {
-				log.Printf("error running command: %v", err)
-			}
+			go func() {
+				err = con.Session.Wait()
+				if err != nil {
+					log.Printf(color.Red+"error running command on Session.Wait(): %v"+color.Reset, err)
+				}
+			}()
 		} else {
 			log.Printf("received:%v %s", typ, data)
 		}
