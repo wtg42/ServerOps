@@ -15,18 +15,18 @@ type Connection struct {
 }
 
 // Client 端連線 Websocket 解析完命令後再連線到 SSH 伺服器(使用帳密認證)
-func ConnectToSSHServer() {
+func ConnectToSSHServer(ip string, pw string) {
 	// SSH 連接配置
 	config := &ssh.ClientConfig{
 		User: "root", // 替換為伺服器的使用者名稱
 		Auth: []ssh.AuthMethod{
-			ssh.Password("your_password"), // 替換為對應的密碼
+			ssh.Password(pw), // 明碼密碼認證 (建議開發階段使用)
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // 忽略主機密鑰驗證（建議開發階段使用）
 	}
 
 	// 連接到 SSH 伺服器
-	client, err := ssh.Dial("tcp", "192.168.91.63:2222", config) // 替換成伺服器的地址和端口
+	client, err := ssh.Dial("tcp", ip, config) // 替換成伺服器的地址和端口
 	if err != nil {
 		log.Fatalf("Failed to dial: %s", err)
 	}

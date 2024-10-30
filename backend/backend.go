@@ -10,6 +10,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/wtg42/ServerOps/backend/ssh"
+	// cryptoSSH "golang.org/x/crypto/ssh" // 使用別名因為 ssh 名稱衝突
 )
 
 // color for log message.
@@ -99,6 +100,9 @@ func handleLogsService(w http.ResponseWriter, r *http.Request) {
 				defer con.Client.Close() // 先 Seesion 在 Client
 				targetIP.Reset()
 			}
+
+			// TODO: Use PTY to handle the command.
+			// con.Session.RequestPty("xterm", 80, 40, cryptoSSH.TerminalModes{})
 
 			// 新的會話處理
 			con.NewSession()
