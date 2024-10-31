@@ -10,7 +10,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/wtg42/ServerOps/backend/ssh"
-	// cryptoSSH "golang.org/x/crypto/ssh" // 使用別名因為 ssh 名稱衝突
+	cryptoSSH "golang.org/x/crypto/ssh" // 使用別名因為 ssh 名稱衝突
 )
 
 // color for log message.
@@ -101,12 +101,14 @@ func handleLogsService(w http.ResponseWriter, r *http.Request) {
 				targetIP.Reset()
 			}
 
-			// TODO: Use PTY to handle the command.
-			// con.Session.RequestPty("xterm", 80, 40, cryptoSSH.TerminalModes{})
-
 			// 新的會話處理
 			con.NewSession()
 			defer con.Session.Close()
+
+			// TODO: Use PTY to handle the command.
+			if err := con.Session.RequestPty("xterm-256color", 120, 80, cryptoSSH.TerminalModes{}); err != nil {
+				log.Fatalf(color.Red+"Request for pseudo terminal failed: %s"+color.Reset, err)
+			}
 
 			stdoutPipe, err := con.Session.StdoutPipe()
 			if err != nil {
