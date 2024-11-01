@@ -45,6 +45,8 @@ func main() {
 			case "logs":
 				// TODO: 這段改成使用 goroutine + StdoutPipe 持續讀取 tail -f
 				fetchLogs(s)
+			case "processManager":
+				topCmd(s)
 			default:
 				io.WriteString(s, cmd[0]+" <- Unknown command.\n")
 			}
@@ -66,6 +68,7 @@ func main() {
 	sig := <-sigc
 	log.Printf("Received signal %s: shutting down ssh server...\n", sig)
 
+	// 這段不確定是否會使用到，可能一次性的指令才會有作用。
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := sshServ.Shutdown(ctx); err != nil {
@@ -80,6 +83,7 @@ func main() {
 // "/var/log/php.log" and "/var/log/apache/error_log".
 // Use io.WriteString() to return data.
 func fetchLogs(s ssh.Session) {
+	// 預防指令還沒有跑完 主線程關閉
 	wg.Add(1)
 	defer wg.Done()
 
@@ -92,7 +96,6 @@ func fetchLogs(s ssh.Session) {
 	}
 	cmd := exec.Command(args[0], args[1:]...)
 	stdout, err := cmd.StdoutPipe()
-
 	if err != nil {
 		log.Fatalf("Error getting stdout pipe: %v", err)
 	}
@@ -117,6 +120,44 @@ func fetchLogs(s ssh.Session) {
 
 	// If session is closed, kill the process.
 	<-s.Context().Done()
+	if cmd.Process != nil {
+		cmd.Process.Kill()
+	}
+}
+
+// topCmd streams output from "top".
+func topCmd(s ssh.Session) {
+	// 預防指令還沒有跑完 主線程關閉
+	wg.Add(1)
+	defer wg.Done()
+
+	args := []string{"top"}
+	cmd := exec.Command(args[0])
+	// setting stdout.
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		log.Fatalf("Error getting 'top' stdout pipe: %v", err)
+	}
+
+	// Start 'top' and wait for it to finish.
+	if err := cmd.Start(); err != nil {
+		log.Fatalf("Error starting 'top' command: %v", err)
+	}
+
+	// Create a scanner for 'top' stdout.
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+
+			log.Printf("top: %s\n", scanner.Text())
+			// 輸出當前 buffer 中的資料
+			io.WriteString(s, scanner.Text()+"\n")
+		}
+	}()
+
+	// Block until 'top' finishes or session is closed.
+	<-s.Context().Done()
+
 	if cmd.Process != nil {
 		cmd.Process.Kill()
 	}

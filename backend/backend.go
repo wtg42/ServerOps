@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -19,6 +20,10 @@ type ColorCode struct {
 	Red   code
 	Green code
 	Reset code
+}
+
+type SessionStart interface {
+	Start(cmdType string)
 }
 
 // API Server
@@ -88,7 +93,7 @@ func handleLogsService(w http.ResponseWriter, r *http.Request) {
 			var v Message
 			err = json.Unmarshal(data, &v)
 			if err != nil {
-				log.Printf(color.Red+"error reading from json data: %v"+color.Reset, err)
+				log.Printf(color.Red+"error reading from json data: %+v"+color.Reset, err)
 				return
 			}
 			log.Printf("Json contents is : %v", v)
@@ -106,7 +111,9 @@ func handleLogsService(w http.ResponseWriter, r *http.Request) {
 			defer con.Session.Close()
 
 			// TODO: Use PTY to handle the command.
-			if err := con.Session.RequestPty("xterm-256color", 120, 80, cryptoSSH.TerminalModes{}); err != nil {
+			if err := con.Session.RequestPty(
+				"xterm-256color", 120, 80, cryptoSSH.TerminalModes{},
+			); err != nil {
 				log.Fatalf(color.Red+"Request for pseudo terminal failed: %s"+color.Reset, err)
 			}
 
@@ -120,7 +127,10 @@ func handleLogsService(w http.ResponseWriter, r *http.Request) {
 				log.Printf(color.Red+"error getting stderr pipe: %v"+color.Reset, err)
 			}
 
-			err = con.Session.Start("logs")
+			// var icon SessionStart = con
+			// icon.Start(v.Type)
+			log.Printf("vType is :::=>%+v", v.Type)
+			err = con.Session.Start("processManager")
 			if err != nil {
 				log.Printf(color.Red+"error running command `logs`: %v"+color.Reset, err)
 			}
@@ -132,7 +142,9 @@ func handleLogsService(w http.ResponseWriter, r *http.Request) {
 				for scanner.Scan() {
 					log.Printf("TEXT:: %v", scanner.Text())
 					// 將標準輸出的每一行發送到 WebSocket 客戶端
-					if err := wscon.Write(ctx, websocket.MessageText, scanner.Bytes()); err != nil {
+					// scanner 不會保留換行，需要自行添加。
+					line := fmt.Sprintf("%s\r\n", scanner.Text())
+					if err := wscon.Write(ctx, websocket.MessageText, []byte(line)); err != nil {
 						log.Printf(color.Red+"error writing to websocket: %v"+color.Reset, err)
 						continue
 					}

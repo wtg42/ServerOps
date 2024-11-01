@@ -124,3 +124,10 @@ func (c *Connection) NewSession() {
 		log.Fatalf("Failed to create session: %s", err)
 	}
 }
+
+// Implement SessionStart interface.
+func (c *Connection) Start(cmdType string) {
+	if err := c.Session.Start(cmdType); err != nil {
+		log.Fatalf("Failed to start session: %s", err)
+	}
+}
