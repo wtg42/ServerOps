@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -42,10 +43,10 @@ func main() {
 		cmd := s.Command()
 		if len(cmd) > 0 {
 			switch cmd[0] {
-			case "logs":
+			case "log":
 				// TODO: 這段改成使用 goroutine + StdoutPipe 持續讀取 tail -f
 				fetchLogs(s)
-			case "processManager":
+			case "process":
 				topCmd(s)
 			default:
 				io.WriteString(s, cmd[0]+" <- Unknown command.\n")
@@ -144,14 +145,29 @@ func topCmd(s ssh.Session) {
 		log.Fatalf("Error starting 'top' command: %v", err)
 	}
 
+	// 定義清屏控制碼
+	clearScreenCode := []byte("\033[H\033[2J")
+
 	// Create a scanner for 'top' stdout.
 	go func() {
-		scanner := bufio.NewScanner(stdout)
-		for scanner.Scan() {
+		reader := bufio.NewReader(stdout)
+		for {
+			chunk, err := reader.ReadBytes('\n')
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				fmt.Println("Error reading:", err)
+				return
+			}
+			// 檢查 chunk 中是否包含清屏控制碼
+			if bytes.Contains(chunk, clearScreenCode) {
+				fmt.Println("Clear screen detected!")
+				// 輸出當前 buffer 中的資料
+				io.WriteString(s, "\033[2J\033[1;1H")
+			}
 
-			log.Printf("top: %s\n", scanner.Text())
-			// 輸出當前 buffer 中的資料
-			io.WriteString(s, scanner.Text()+"\n")
+			io.WriteString(s, string(chunk))
 		}
 	}()
 
